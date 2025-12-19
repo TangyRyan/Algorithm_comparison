@@ -1,4 +1,4 @@
-﻿ot
+﻿pot
 numpy>=1.23
 faiss-cpu>=1.7.4
 lapjv>=1.3
