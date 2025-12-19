@@ -1,0 +1,6 @@
+﻿项目运行环境依赖（Python）：
+- Python 3.9+（64 位）
+- 核心依赖：numpy；faiss-cpu（或 faiss-gpu，如有 CUDA）；lapjv
+- 可视化：matplotlib
+- 安装示例：pip install numpy faiss-cpu lapjv matplotlib
+- 数据：需要 data/<N>/A.npy 与 B.npy（生成脚本：generate_data.py / generate_data_small.py）
