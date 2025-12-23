@@ -168,11 +168,9 @@ def shortest_edge_first_greedy_matching_faiss_general(
 
             gained = len(matching_pairs) - before
             if gained == 0:
-                # 本轮没有增量：扩大候选数再试
-                k_ext = min(len(unmatched_B_indices), max(k_eff * 2, k_eff + 10))
+                k_ext = len(unmatched_B_indices)  # 直接全量搜索剩余点
             else:
-                # 有增量：通常也适当增大，减少下一轮“被抢占”导致的卡住
-                k_ext = min(len(unmatched_B_indices), max(k_ext, k_eff * 2))
+                k_ext = min(len(unmatched_B_indices), max(k_ext * 2, 500))
 
             rounds += 1
 
