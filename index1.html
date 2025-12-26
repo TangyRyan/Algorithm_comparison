@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <title>Algorithm Comparison Visualization</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; }
+        #controls { margin: 20px; }
+        svg { border: 1px solid #ccc; background-color: #f9f9f9; }
+        .tooltip { position: absolute; background: white; padding: 5px; border: 1px solid #333; pointer-events: none; opacity: 0;}
+    </style>
+</head>
+<body>
+
+    <div id="controls">
+        <label for="algoSelect">选择映射算法: </label>
+        <select id="algoSelect"></select>
+        <span style="margin-left: 20px;">当前显示: <span id="status">加载中...</span></span>
+    </div>
+
+    <div id="chart"></div>
+
+    <script>
+        // 配置参数
+        const width = 800;
+        const height = 800;
+        const margin = 20;
+
+        // 颜色映射 (根据 label)
+        const colorScale = d3.scaleOrdinal(d3.schemeCategory10);
+
+        // 创建 SVG
+        const svg = d3.select("#chart")
+            .append("svg")
+            .attr("width", width)
+            .attr("height", height);
+
+        // 加载数据
+        d3.json("viz_data_Person_activity.json").then(data => {
+            const sourcePoints = data.source_points;
+            const targetPoints = data.target_points;
+            const labels = data.labels;
+            const mappings = data.mappings;
+            const algos = Object.keys(mappings);
+
+            // 填充下拉菜单
+            const select = d3.select("#algoSelect");
+            select.selectAll("option")
+                .data(algos)
+                .enter().append("option")
+                .text(d => d)
+                .attr("value", d => d);
+
+            // 计算点半径: 800 / sqrt(target数量) / 2
+            const numTargets = targetPoints.length;
+            const radius = (800 / Math.sqrt(numTargets)) / 2;
+
+            console.log("Calculated Radius:", radius);
+
+            // 创建比例尺 (假设数据需要在画布内归一化，如果数据已经是 0-800 可跳过)
+            // 这里我们动态计算数据的范围并映射到 0-800
+            const allPoints = [...sourcePoints, ...targetPoints];
+            const xExtent = d3.extent(allPoints, d => d[0]);
+            const yExtent = d3.extent(allPoints, d => d[1]);
+
+            const xScale = d3.scaleLinear()
+                .domain(xExtent)
+                .range([margin, width - margin]);
+
+            const yScale = d3.scaleLinear()
+                .domain(yExtent)
+                .range([height - margin, margin]); // Y轴通常反转
+
+            // 绘制函数
+            function draw(algoName) {
+                d3.select("#status").text(algoName);
+                const mapping = mappings[algoName];
+
+                // 数据绑定: 我们绘制的是 "映射后的点"
+                // 逻辑: 每个源点 source[i] 映射到了 target[mapping[i]]
+                // 我们在 target[mapping[i]] 的位置画一个圆，颜色由 source[i] 的 label 决定
+
+                // 准备绘图数据
+                const drawData = mapping.map((targetIdx, sourceIdx) => ({
+                    x: targetPoints[targetIdx][0],
+                    y: targetPoints[targetIdx][1],
+                    label: labels[sourceIdx],
+                    sourceIdx: sourceIdx,
+                    targetIdx: targetIdx
+                }));
+
+                const circles = svg.selectAll("circle")
+                    .data(drawData, d => d.sourceIdx); // 使用 sourceIdx 作为 key
+
+                // 进入 (Enter) + 更新 (Update)
+                circles.join(
+                    enter => enter.append("circle")
+                        .attr("cx", d => xScale(d.x))
+                        .attr("cy", d => yScale(d.y))
+                        .attr("r", radius)
+                        .attr("fill", d => colorScale(d.label))
+                        .attr("opacity", 0.8),
+                    update => update.transition().duration(500)
+                        .attr("cx", d => xScale(d.x))
+                        .attr("cy", d => yScale(d.y))
+                        .attr("fill", d => colorScale(d.label))
+                );
+            }
+
+            // 初始绘制
+            if (algos.length > 0) {
+                draw(algos[0]);
+            }
+
+            // 监听下拉菜单变化
+            select.on("change", function() {
+                draw(this.value);
+            });
+
+        }).catch(err => {
+            console.error("加载数据失败:", err);
+            d3.select("#status").text("加载数据失败，请确保 viz_data.json 存在且格式正确。注意浏览器安全策略可能禁止直接读取本地文件，请使用本地服务器 (如 python -m http.server)。");
+            d3.select("#status").style("color", "red");
+        });
+    </script>
+</body>
+</html>

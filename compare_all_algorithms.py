@@ -158,12 +158,15 @@ def run_partial_ot(A, B):
 # ==========================================
 # 3. 绘图
 # ==========================================
-def plot_matching_result(A, B, matching_pairs, title, ax):
+def plot_matching_result(A, B, matching_pairs, title, ax, sample_indices=None):
     total = len(A)
-    if total > 1000:
-        indices = np.random.choice(total, 1000, replace=False)
+    if sample_indices is None:
+        if total > 1000:
+            indices = np.random.choice(total, 1000, replace=False)
+        else:
+            indices = np.arange(total)
     else:
-        indices = np.arange(total)
+        indices = sample_indices
 
     A_sub = A[indices]
     B_sub = B[indices]
@@ -288,8 +291,14 @@ if __name__ == "__main__":
     fig, axes = plt.subplots(1, len(results), figsize=(5 * len(results), 5))
     if len(results) == 1: axes = [axes]
 
+    total = len(A)
+    if total > 1000:
+        sample_indices = np.random.choice(total, 1000, replace=False)
+    else:
+        sample_indices = np.arange(total)
+
     for ax, (name, pairs, cost, t) in zip(axes, results):
-        plot_matching_result(A, B, pairs, f"{name}\nTime={t:.2f}s", ax=ax)
+        plot_matching_result(A, B, pairs, f"{name}\nTime={t:.2f}s", ax=ax, sample_indices=sample_indices)
 
     plt.tight_layout()
     plt.show()

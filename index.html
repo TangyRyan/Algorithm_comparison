@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <title>Algorithm Matching Visualization</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; display: flex; flex-direction: column; align-items: center; background-color: #f0f2f5; }
+        #controls { margin: 20px; padding: 15px; background: white; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        svg { border: 1px solid #ccc; background-color: white; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .legend { font-size: 12px; }
+    </style>
+</head>
+<body>
+
+    <div id="controls">
+        <label for="algoSelect"><strong>选择算法:</strong> </label>
+        <select id="algoSelect" style="padding: 5px; margin-right: 15px;"></select>
+
+        <label><input type="checkbox" id="showLines" checked> 显示连线</label>
+        <label><input type="checkbox" id="showSource" checked> 显示源点</label>
+
+        <span style="margin-left: 20px; color: #666;">当前显示: <span id="status" style="font-weight: bold; color: #333;">加载中...</span></span>
+    </div>
+
+    <div id="chart"></div>
+
+    <script>
+        // === 1. 配置参数 ===
+        const width = 800;
+        const height = 800;
+        const margin = 40;
+
+        // 颜色映射 (使用 D3 的标准配色方案)
+        const colorScale = d3.scaleOrdinal(d3.schemeCategory10);
+
+        // 创建 SVG 容器
+        const svg = d3.select("#chart")
+            .append("svg")
+            .attr("width", width)
+            .attr("height", height);
+
+        // === 2. 创建图层组 (确保绘制顺序：线 -> 源点 -> 目标点) ===
+        const layerLines = svg.append("g").attr("class", "layer-lines");
+        const layerSource = svg.append("g").attr("class", "layer-source");
+        const layerTarget = svg.append("g").attr("class", "layer-target");
+
+        // === 3. 加载数据 ===
+        // 请确保 Python 生成的 json 文件名为 'viz_data.json' 或在此处修改文件名
+        d3.json("viz_data_Person_activity.json").then(data => {
+            const sourcePoints = data.source_points;
+            const targetPoints = data.target_points;
+            const labels = data.labels;
+            const mappings = data.mappings;
+            const algos = Object.keys(mappings);
+
+            // 填充下拉菜单
+            const select = d3.select("#algoSelect");
+            select.selectAll("option")
+                .data(algos)
+                .enter().append("option")
+                .text(d => d)
+                .attr("value", d => d);
+
+            // --- 坐标比例尺 ---
+            // 为了让所有点都在画布内，我们需要找出所有点(Source+Target)的最大最小值
+            const allPoints = [...sourcePoints, ...targetPoints];
+            const xExtent = d3.extent(allPoints, d => d[0]);
+            const yExtent = d3.extent(allPoints, d => d[1]);
+
+            // 增加一点内边距，防止点贴边
+            const xScale = d3.scaleLinear().domain(xExtent).range([margin, width - margin]);
+            const yScale = d3.scaleLinear().domain(yExtent).range([margin, height - margin]); // 不反转Y轴
+
+
+            // --- 计算点半径 ---
+            // 您的公式: 800 / sqrt(target数量) / 2
+            const numTargets = targetPoints.length;
+            const radius = (800 / Math.sqrt(numTargets)) / 2;
+            console.log("Radius:", radius);
+
+            // === 4. 绘制源点 (Source Points) ===
+            // 源点位置是固定的，只绘制一次
+            function drawSourcePoints() {
+                layerSource.selectAll("circle")
+                    .data(sourcePoints)
+                    .enter()
+                    .append("circle")
+                    .attr("cx", d => xScale(d[0]))
+                    .attr("cy", d => yScale(d[1]))
+                    .attr("r", Math.max(radius * 0.5, 2)) // 源点稍微画小一点
+                    .attr("fill", "none")
+                    .attr("stroke", (d, i) => colorScale(labels[i])) // 边框颜色对应 Label
+                    .attr("stroke-width", 1.5)
+                    .attr("opacity", 0.4); // 半透明，作为背景参考
+            }
+            drawSourcePoints();
+
+            // === 5. 核心绘制函数 (根据算法更新) ===
+            function draw(algoName) {
+                d3.select("#status").text(algoName);
+                const mapping = mappings[algoName]; // 这是一个数组: [targetIdx1, targetIdx2, -1, ...]
+
+                // 构造绘图数据
+                // 我们遍历每一个 source point，查看它匹配到了哪个 target point
+                const links = mapping.map((targetIdx, sourceIdx) => {
+                    if (targetIdx === -1) return null; // 未匹配
+                    return {
+                        id: sourceIdx, // 唯一标识
+                        source: sourcePoints[sourceIdx],
+                        target: targetPoints[targetIdx],
+                        label: labels[sourceIdx]
+                    };
+                }).filter(d => d !== null);
+
+                const t = d3.transition().duration(750);
+
+                // --- A. 绘制连线 (Lines) ---
+                const showLines = d3.select("#showLines").property("checked");
+
+                const lines = layerLines.selectAll("line")
+                    .data(showLines ? links : [], d => d.id);
+
+                lines.join(
+                    enter => enter.append("line")
+                        .attr("x1", d => xScale(d.source[0]))
+                        .attr("y1", d => yScale(d.source[1]))
+                        .attr("x2", d => xScale(d.source[0])) // 初始状态：线缩在源点处（动画效果）
+                        .attr("y2", d => yScale(d.source[1]))
+                        .attr("stroke", "#999")
+                        .attr("stroke-width", 1)
+                        .attr("opacity", 0.5)
+                        .call(enter => enter.transition(t)
+                            .attr("x2", d => xScale(d.target[0]))
+                            .attr("y2", d => yScale(d.target[1]))
+                        ),
+                    update => update.call(update => update.transition(t)
+                        .attr("x1", d => xScale(d.source[0]))
+                        .attr("y1", d => yScale(d.source[1]))
+                        .attr("x2", d => xScale(d.target[0]))
+                        .attr("y2", d => yScale(d.target[1]))
+                    ),
+                    exit => exit.transition(t).attr("opacity", 0).remove()
+                );
+
+                // --- B. 绘制匹配后的目标点 (Mapped Target Points) ---
+                // 注意：多个 source 可能映射到同一个 target (如果不是一一映射)，或者 target 没被用到
+                // 这里我们只绘制“被选中”的 target 点，颜色跟随 source 的 label
+
+                const circles = layerTarget.selectAll("circle")
+                    .data(links, d => d.id); // 绑定到 sourceID，这样点会跟着源动
+
+                circles.join(
+                    enter => enter.append("circle")
+                        .attr("cx", d => xScale(d.target[0]))
+                        .attr("cy", d => yScale(d.target[1]))
+                        .attr("r", 0) // 初始半径0
+                        .attr("fill", d => colorScale(d.label))
+                        .call(enter => enter.transition(t)
+                            .attr("r", radius)
+                        ),
+                    update => update.call(update => update.transition(t)
+                        .attr("cx", d => xScale(d.target[0]))
+                        .attr("cy", d => yScale(d.target[1]))
+                        .attr("fill", d => colorScale(d.label))
+                        .attr("r", radius)
+                    ),
+                    exit => exit.transition(t).attr("r", 0).remove()
+                );
+            }
+
+            // === 6. 初始化与交互 ===
+            // 初始绘制
+            if (algos.length > 0) draw(algos[0]);
+
+            // 事件监听
+            select.on("change", function() { draw(this.value); });
+            d3.select("#showLines").on("change", () => draw(select.property("value")));
+            d3.select("#showSource").on("change", function() {
+                layerSource.attr("opacity", this.checked ? 1 : 0);
+            });
+
+        }).catch(err => {
+            console.error(err);
+            d3.select("#status").text("加载 viz_data.json 失败").style("color", "red");
+        });
+    </script>
+</body>
+</html>
