@@ -1,4 +1,4 @@
-﻿pot
+pot
 numpy>=1.23
 pandas
 faiss-cpu>=1.7.4
